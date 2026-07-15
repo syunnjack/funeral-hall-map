@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CostReport;
 use App\Models\DocumentRequest;
 use App\Models\Favorite;
 use App\Models\LineUser;
@@ -57,7 +58,7 @@ class LineLoginController extends Controller
             if ($venue) {
                 Favorite::firstOrCreate(
                     ['line_user_id' => $lineUser->id, 'venue_id' => $venue->id],
-                    ['last_checked_at' => now()]
+                    ['last_checked_report_id' => CostReport::where('venue_id', $venue->id)->max('id') ?? 0]
                 );
 
                 return redirect()->route('venues.show', $venue)->with('success', '通知登録が完了しました。新しい費用の口コミが投稿されるとLINEでお知らせします。');

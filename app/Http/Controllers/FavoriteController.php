@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CostReport;
 use App\Models\Favorite;
 use App\Models\Venue;
 use Illuminate\Http\Request;
@@ -29,7 +30,7 @@ class FavoriteController extends Controller
         Favorite::create([
             'line_user_id' => $lineUserLocalId,
             'venue_id' => $venue->id,
-            'last_checked_at' => now(),
+            'last_checked_report_id' => CostReport::where('venue_id', $venue->id)->max('id') ?? 0,
         ]);
 
         return back()->with('success', '新しい費用の口コミが投稿されるとLINEでお知らせします。');

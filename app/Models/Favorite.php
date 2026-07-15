@@ -9,15 +9,8 @@ class Favorite extends Model
     protected $fillable = [
         'line_user_id',
         'venue_id',
-        'last_checked_at',
+        'last_checked_report_id',
     ];
-
-    protected function casts(): array
-    {
-        return [
-            'last_checked_at' => 'datetime',
-        ];
-    }
 
     public function lineUser()
     {

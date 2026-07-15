@@ -22,25 +22,26 @@ class CheckCostReportWatches extends Command
                 continue;
             }
 
-            $since = $favorite->last_checked_at ?? $favorite->created_at;
+            $since = $favorite->last_checked_report_id ?? 0;
             $newReports = CostReport::where('venue_id', $favorite->venue_id)
-                ->where('created_at', '>', $since)
+                ->where('id', '>', $since)
                 ->get();
 
-            if ($newReports->isNotEmpty()) {
-                $latest = $newReports->first();
-                $favorite->loadMissing('venue');
-                LineMessaging::push(
-                    $favorite->lineUser->line_user_id,
-                    "「{$favorite->venue->name}」の新しい費用の口コミが投稿されました: " . number_format($latest->total_cost) . '円'
-                    . ($latest->funeral_type ? "（{$latest->funeral_type}）" : '')
-                );
-
-                // last_checked_atは「実際に検知した最新レポートの時刻」まで進める。
-                // now()まで無条件に進めると、チェック実行と同一秒内に投稿されたレポートが
-                // 次回以降も since より前の扱いとなり永久に検知漏れになるため。
-                $favorite->update(['last_checked_at' => $newReports->max('created_at')]);
+            if ($newReports->isEmpty()) {
+                continue;
             }
+
+            $latest = $newReports->sortByDesc('id')->first();
+            $favorite->loadMissing('venue');
+            LineMessaging::push(
+                $favorite->lineUser->line_user_id,
+                "「{$favorite->venue->name}」の新しい費用の口コミが投稿されました: " . number_format($latest->total_cost) . '円'
+                . ($latest->funeral_type ? "（{$latest->funeral_type}）" : '')
+            );
+
+            // last_checked_report_idは検知カーソル。idは常に厳密単調増加のため、
+            // created_at(秒精度)を使った場合に起こりうる同一秒内の複数投稿の取りこぼしが起きない。
+            $favorite->update(['last_checked_report_id' => $newReports->max('id')]);
         }
 
         return self::SUCCESS;
