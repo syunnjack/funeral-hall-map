@@ -1,4 +1,4 @@
 User-agent: *
 Disallow:
 
-Sitemap: https://funeral-hall-map.example.com/sitemap.xml
+Sitemap: https://sougisha-map.jp/sitemap.xml
