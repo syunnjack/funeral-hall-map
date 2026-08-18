@@ -1,0 +1,62 @@
+# 会館データを本番DBに取り込む。手動実行のみ。
+#
+# 通常のデプロイ(deploy.yml)では走らせない。取り込みは毎回やる必要が無いうえ、
+# 本番のデータベースに書き込む操作なので、意図したときだけ動かしたい。
+#
+# シーダーは updateOrCreate なので、何度流しても重複しない。
+# 利用者が投稿した施設(source が空)には触れない。
+name: Import venue data
+
+on:
+  workflow_dispatch:
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # マイグレーションとシーダー、取り込み元のJSONを送る。消す操作はしない。
+      # database/database.sqlite はリポジトリに含まれていないので、
+      # 本番のデータベース本体が上書きされることはない。
+      - name: Upload database files via SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          username: ${{ secrets.SSH_USERNAME }}
+          server: ${{ secrets.SSH_HOST }}
+          port: 10022
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          local_path: './database/*'
+          remote_path: '/home/xs501620/sougisha-map.jp/app/database/'
+          sftp_only: true
+          delete_remote_files: false
+
+      - name: Upload app and model changes via SFTP
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          username: ${{ secrets.SSH_USERNAME }}
+          server: ${{ secrets.SSH_HOST }}
+          port: 10022
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          local_path: './app/*'
+          remote_path: '/home/xs501620/sougisha-map.jp/app/app/'
+          sftp_only: true
+          delete_remote_files: false
+
+      - name: Migrate and seed over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: 10022
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ~/sougisha-map.jp/app
+            PHP=$(command -v php8.3 || command -v php || echo /opt/php-8.3.30/bin/php)
+            echo "php: $PHP ($($PHP -v | head -1))"
+            $PHP artisan migrate --force
+            $PHP artisan db:seed --class=OsmVenueSeeder --force
+            $PHP artisan view:clear
+            echo "--- 取り込み後の会館件数 ---"
+            $PHP artisan tinker --execute="echo \App\Models\Venue::count();"

@@ -9,12 +9,17 @@ class Venue extends Model
     protected $fillable = [
         'name',
         'description',
+        'facility_type',
         'area',
         'address',
         'phone',
+        'website',
+        'opening_hours',
         'lat',
         'lng',
         'likes_count',
+        'source',
+        'source_ref',
     ];
 
     protected function casts(): array
