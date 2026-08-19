@@ -1,7 +1,20 @@
 @extends('layouts.plain')
 
-@section('title', config('app.name') . ' | 現在地から探す・実際の費用がわかる葬儀社マップ')
-@section('description', '全国の葬儀社・葬儀会館を地図から検索できる投稿型マップです。現在地から近い会館をワンタップで見つけられ、実際にかかった費用の口コミ・写真付き口コミをリアルタイムで確認できます。')
+@php
+    // 都道府県・施設種別で絞ったページは、それぞれ違う見出しと説明にする。
+    $pageHeading = $area
+        ? $area . 'の' . ($type ?: '葬儀社・斎場')
+        : '葬儀社マップ';
+    $pageTitle = $area
+        ? $pageHeading . number_format($total) . '件｜' . config('app.name')
+        : config('app.name') . ' | 現在地から探す・実際の費用がわかる葬儀社マップ';
+    $pageDescription = $area
+        ? $pageHeading . number_format($total) . '件を地図と一覧から探せます。実際にかかった費用の口コミは利用者の投稿です。'
+        : '全国' . number_format($total) . '件の葬儀社・斎場を地図から検索できます。現在地から近い会館をワンタップで見つけられ、実際にかかった費用の口コミを確認できます。';
+@endphp
+
+@section('title', $pageTitle)
+@section('description', $pageDescription)
 
 @push('structured-data')
 <script type="application/ld+json">
@@ -36,8 +49,10 @@
 @section('content')
 <div class="container my-4">
   <div class="text-center mb-4">
-    <h1 class="fw-bold h3">🕯️ 葬儀社マップ</h1>
-    <p class="text-muted">現在地から近い会館をすぐ見つける・実際の費用がわかる地図</p>
+    <h1 class="fw-bold h3">🕯️ {{ $pageHeading }}</h1>
+    <p class="text-muted">
+      {{ $area ? $pageHeading . 'を地図と一覧から探せます（' . number_format($total) . '件）' : '現在地から近い会館をすぐ見つける・実際の費用がわかる地図' }}
+    </p>
     <a href="{{ route('venues.create') }}" class="btn btn-funeral shadow-sm px-4">➕ 葬儀社・葬儀会館を投稿</a>
   </div>
 
@@ -46,22 +61,55 @@
   </div>
   <p id="locateMessage" class="text-center text-muted small mb-3"></p>
 
-  <div id="map" data-venues="{{ $venues->map(fn ($v) => ['id' => $v->id, 'name' => $v->name, 'area' => $v->area, 'lat' => $v->lat, 'lng' => $v->lng])->toJson() }}" style="height: 360px;" class="rounded shadow-sm border mb-4"></div>
+  @php
+      $mapVenues = $venues->getCollection()->map(fn ($v) => [
+          'id' => $v->id, 'name' => $v->name, 'area' => $v->area, 'lat' => $v->lat, 'lng' => $v->lng,
+      ])->values();
+  @endphp
+  <div id="map" data-venues="{{ $mapVenues->toJson() }}" style="height: 360px;" class="rounded shadow-sm border mb-4"></div>
 
-  <form method="GET" action="{{ route('venues.index') }}" class="row g-2 mb-4">
-    <div class="col-md-4">
-      <label class="form-label">エリア</label>
-      <select name="area" class="form-select">
-        <option value="">すべて</option>
-        @foreach($areas as $area)
-          <option value="{{ $area }}" @selected(request('area') == $area)>{{ $area }}</option>
+  @if($area)
+    <nav aria-label="パンくず" class="small mb-3">
+      <a href="{{ route('venues.index') }}">葬儀社マップ</a>
+      <span class="text-muted mx-1">/</span>
+      @if($type)
+        <a href="{{ route('venues.area', $areaSlug) }}">{{ $area }}</a>
+        <span class="text-muted mx-1">/</span><span class="text-muted">{{ $type }}</span>
+      @else
+        <span class="text-muted">{{ $area }}</span>
+      @endif
+    </nav>
+
+    @if($typeCounts->isNotEmpty())
+      <p class="d-flex flex-wrap gap-2 mb-3">
+        <a href="{{ route('venues.area', $areaSlug) }}"
+           class="btn btn-sm {{ $typeSlug ? 'btn-outline-secondary' : 'btn-primary' }}">すべて</a>
+        @foreach($typeCounts as $row)
+          <a href="{{ route('venues.area.type', [$areaSlug, $row['slug']]) }}"
+             class="btn btn-sm {{ $typeSlug === $row['slug'] ? 'btn-primary' : 'btn-outline-secondary' }}">
+            {{ $row['type'] }} <span class="text-muted">{{ number_format($row['total']) }}</span>
+          </a>
         @endforeach
-      </select>
-    </div>
-    <div class="col-md-2 align-self-end">
-      <button type="submit" class="btn btn-outline-primary w-100">絞り込む</button>
-    </div>
-  </form>
+      </p>
+    @endif
+  @endif
+
+  @if($areaCounts->isNotEmpty())
+    <h2 class="h6">都道府県から探す</h2>
+    <p class="d-flex flex-wrap gap-2 mb-4">
+      @foreach($areaCounts as $row)
+        <a href="{{ route('venues.area', $row['slug']) }}"
+           class="btn btn-sm {{ $areaSlug === $row['slug'] ? 'btn-primary' : 'btn-outline-secondary' }}">
+          {{ $row['area'] }} <span class="text-muted">{{ number_format($row['total']) }}</span>
+        </a>
+      @endforeach
+    </p>
+  @endif
+
+  <p class="text-muted small">
+    {{ number_format($total) }}件のうち
+    {{ number_format($venues->firstItem() ?? 0) }}〜{{ number_format($venues->lastItem() ?? 0) }}件目を表示しています。
+  </p>
 
   <div class="row" id="venueList">
     @forelse($venues as $venue)
@@ -88,6 +136,16 @@
       <p class="text-muted">該当する葬儀社・葬儀会館がありません。</p>
     @endforelse
   </div>
+
+  <div class="d-flex justify-content-center my-3">
+    {{ $venues->onEachSide(1)->links() }}
+  </div>
+
+  <p class="text-muted small">
+    施設の名称・場所・電話番号は OpenStreetMap のデータ（&copy; OpenStreetMap contributors、ODbL 1.0）をもとにしています。
+    取り扱う葬儀の形式や料金は葬儀社によって異なります。表示している平均費用は利用者が投稿した実費で、
+    当サイトでは内容を確認しておらず、見積り金額を示すものではありません。依頼の前に必ず各社へ直接ご確認ください。
+  </p>
 </div>
 @endsection
 

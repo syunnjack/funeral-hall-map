@@ -5,21 +5,112 @@ namespace App\Http\Controllers;
 use App\Models\Venue;
 use App\Support\ContentModeration;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class VenueController extends Controller
 {
+    /** 1ページに載せる施設の数。 */
+    private const PER_PAGE = 60;
+
     public function index(Request $request)
     {
-        $query = Venue::query()->withAvg('costReports', 'total_cost');
-
+        // 旧URL（/?area=東京都）は都道府県ページへ送る。
         if ($request->filled('area')) {
-            $query->where('area', $request->input('area'));
+            $slug = Venue::slugForArea((string) $request->input('area'));
+
+            if ($slug !== null) {
+                return redirect()->route('venues.area', ['areaSlug' => $slug], 301);
+            }
         }
 
-        $venues = $query->latest()->get();
-        $areas = Venue::query()->whereNotNull('area')->distinct()->pluck('area');
+        // 2,400件を超える一覧を1ページに描くと、HTMLだけで2.5MBになる。
+        // 表示・地図ともにこのページの分だけにする。
+        $venues = Venue::query()
+            ->withAvg('costReports', 'total_cost')
+            ->latest()
+            ->paginate(self::PER_PAGE);
 
-        return view('venues.index', compact('venues', 'areas'));
+        return $this->listView($venues, null, null, Venue::count());
+    }
+
+    /**
+     * 都道府県ページ（/area/tokyo）と、施設種別まで絞ったページ（/area/tokyo/saijo）。
+     *
+     * 「東京都 斎場」のように地域と種別で探す人が多く、トップページ1枚では受けきれない。
+     */
+    public function area(string $areaSlug, ?string $typeSlug = null)
+    {
+        $area = Venue::areaForSlug($areaSlug);
+        $type = $typeSlug === null ? null : Venue::typeForSlug($typeSlug);
+
+        if ($area === null || ($typeSlug !== null && $type === null)) {
+            abort(404);
+        }
+
+        $venues = Venue::query()
+            ->withAvg('costReports', 'total_cost')
+            ->where('area', $area)
+            ->when($type, fn ($query) => $query->where('facility_type', $type))
+            ->orderBy('name')
+            ->paginate(self::PER_PAGE);
+
+        // 中身の無いページを作らない。
+        if ($venues->total() === 0) {
+            abort(404);
+        }
+
+        return $this->listView($venues, $area, $type, $venues->total());
+    }
+
+    private function listView($venues, ?string $area, ?string $type, int $total)
+    {
+        return view('venues.index', [
+            'venues' => $venues,
+            'areaCounts' => $this->areaCounts(),
+            'typeCounts' => $area === null ? collect() : $this->typeCounts($area),
+            'area' => $area,
+            'areaSlug' => Venue::slugForArea($area),
+            'type' => $type,
+            'typeSlug' => Venue::slugForType($type),
+            'total' => $total,
+        ]);
+    }
+
+    /** 都道府県ごとの掲載件数（多い順）。 */
+    private function areaCounts()
+    {
+        return Venue::query()
+            ->selectRaw('area, COUNT(*) as total')
+            ->whereNotNull('area')
+            ->groupBy('area')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row) => [
+                'area' => $row->area,
+                'slug' => Venue::slugForArea($row->area),
+                'total' => (int) $row->total,
+            ])
+            ->filter(fn (array $row) => $row['slug'] !== null)
+            ->values();
+    }
+
+    /** その都道府県での施設種別ごとの件数。 */
+    private function typeCounts(string $area)
+    {
+        return Venue::query()
+            ->selectRaw('facility_type, COUNT(*) as total')
+            ->where('area', $area)
+            ->whereNotNull('facility_type')
+            ->groupBy('facility_type')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($row) => [
+                'type' => $row->facility_type,
+                'slug' => Venue::slugForType($row->facility_type),
+                'total' => (int) $row->total,
+            ])
+            ->filter(fn (array $row) => $row['slug'] !== null)
+            ->values();
     }
 
     public function create()
@@ -92,8 +183,35 @@ class VenueController extends Controller
 
     public function sitemap()
     {
-        $venues = Venue::select('id', 'updated_at')->get();
-        $xml = view('sitemap', compact('venues'))->render();
+        // 2,400件を超えるので、毎回組み立てると重い。短時間だけ覚えておく。
+        $xml = Cache::remember('sitemap-xml', now()->addHour(), function () {
+            $venues = Venue::select('id', 'updated_at')->get();
+
+            // 掲載のある都道府県ページと、その中の施設種別ページを載せる。
+            $areaUrls = Venue::query()
+                ->selectRaw('area, facility_type')
+                ->whereNotNull('area')
+                ->groupBy('area', 'facility_type')
+                ->get()
+                ->flatMap(function ($row) {
+                    $areaSlug = Venue::slugForArea($row->area);
+                    $typeSlug = Venue::slugForType($row->facility_type);
+
+                    if ($areaSlug === null) {
+                        return [];
+                    }
+
+                    return array_filter([
+                        route('venues.area', $areaSlug),
+                        $typeSlug ? route('venues.area.type', [$areaSlug, $typeSlug]) : null,
+                    ]);
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            return view('sitemap', compact('venues', 'areaUrls'))->render();
+        });
 
         return response($xml, 200)->header('Content-Type', 'application/xml');
     }

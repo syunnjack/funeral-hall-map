@@ -1,7 +1,7 @@
 @extends('layouts.plain')
 
-@section('title', $venue->name . ' の費用口コミ・写真付き口コミ | ' . config('app.name'))
-@section('description', $venue->name . '（' . ($venue->area ?? '葬儀社') . '）の場所・実際にかかった費用の口コミ・写真付き口コミを確認できます。')
+@section('title', $venue->name . '（' . trim(($venue->area ?? '') . ' ' . ($venue->facility_type ?? '葬儀社')) . '）の費用口コミ・写真付き口コミ | ' . config('app.name'))
+@section('description', $venue->name . '（' . trim(($venue->area ?? '') . ' ' . ($venue->facility_type ?? '葬儀社')) . '）の場所・連絡先・実際にかかった費用の口コミ・写真付き口コミを確認できます。')
 
 @push('structured-data')
 <script type="application/ld+json">
@@ -10,7 +10,12 @@
   '@type' => 'BreadcrumbList',
   'itemListElement' => [
       ['@type' => 'ListItem', 'position' => 1, 'name' => config('app.name'), 'item' => url('/')],
-      ['@type' => 'ListItem', 'position' => 2, 'name' => $venue->name, 'item' => url("/venues/{$venue->id}")],
+      ...($venue->area_slug ? [[
+          '@type' => 'ListItem', 'position' => 2, 'name' => $venue->area,
+          'item' => route('venues.area', $venue->area_slug),
+      ]] : []),
+      ['@type' => 'ListItem', 'position' => $venue->area_slug ? 3 : 2, 'name' => $venue->name,
+       'item' => url("/venues/{$venue->id}")],
   ],
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !!}
 </script>
@@ -36,15 +41,46 @@
   <div class="card shadow-sm">
     <div class="card-body p-4">
       <h1 class="h3 fw-bold mb-3">{{ $venue->name }}</h1>
+      @if($venue->facility_type)
+        <span class="badge bg-light text-dark border mb-2">{{ $venue->facility_type }}</span>
+      @endif
       <p class="text-muted mb-2">{{ $venue->description }}</p>
       @if($venue->area)
-        <p class="text-secondary small mb-1">エリア: {{ $venue->area }}</p>
+        <p class="text-secondary small mb-1">
+          エリア:
+          @if($venue->area_slug)
+            <a href="{{ route('venues.area', $venue->area_slug) }}">{{ $venue->area }}</a>
+            @if($venue->type_slug)
+              <a href="{{ route('venues.area.type', [$venue->area_slug, $venue->type_slug]) }}" class="ms-1">{{ $venue->area }}の{{ $venue->facility_type }}一覧</a>
+            @endif
+          @else
+            {{ $venue->area }}
+          @endif
+        </p>
       @endif
       @if($venue->address)
         <p class="text-secondary small mb-1">住所: {{ $venue->address }}</p>
       @endif
       @if($venue->phone)
-        <p class="text-secondary small mb-4">電話: {{ $venue->phone }}</p>
+        <p class="text-secondary small mb-1">電話: {{ $venue->phone }}</p>
+      @endif
+      @if($venue->opening_hours)
+        <p class="text-secondary small mb-1">受付時間（OpenStreetMapの記載）: {{ $venue->opening_hours }}</p>
+      @endif
+      @if($venue->website)
+        <p class="text-secondary small mb-1">
+          公式サイト: <a href="{{ $venue->website }}" rel="nofollow noopener" target="_blank">{{ $venue->website }}</a>
+        </p>
+      @endif
+
+      @if($venue->is_from_osm)
+        <div class="alert alert-light border small mt-3 mb-4">
+          この施設の名称・場所は
+          <a href="https://www.openstreetmap.org/{{ $venue->source_ref }}" rel="nofollow noopener" target="_blank">OpenStreetMap</a>
+          のデータ（&copy; OpenStreetMap contributors、ODbL 1.0）をもとに掲載しています。
+          取り扱う葬儀の形式・料金・対応地域は葬儀社によって異なります。
+          費用の口コミは利用者の投稿で、当サイトでは内容を確認していません。依頼の前に必ず直接ご確認ください。
+        </div>
       @endif
 
       <div class="mb-3">

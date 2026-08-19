@@ -12,6 +12,12 @@
     <loc>{{ url('/create') }}</loc>
     <priority>0.5</priority>
   </url>
+@foreach ($areaUrls as $areaUrl)
+  <url>
+    <loc>{{ $areaUrl }}</loc>
+    <priority>0.7</priority>
+  </url>
+@endforeach
 @foreach ($venues as $venue)
   <url>
     <loc>{{ url("/venues/{$venue->id}") }}</loc>

@@ -12,13 +12,19 @@
 
   <title>@yield('title', config('app.name') . ' | 現在地から探す・実際の費用がわかる葬儀社マップ')</title>
   <meta name="description" content="@yield('description', '全国の葬儀社・葬儀会館を地図から探せる投稿型マップです。現在地から近い会館をすぐ見つけられ、実際にかかった費用の口コミ・写真付き口コミをリアルタイムで確認できます。')">
-  <link rel="canonical" href="{{ url()->current() }}">
+  @php
+      // url()->current() はクエリを落とすため、2ページ目以降が1ページ目を
+      // 正規URLとして申告してしまう。内容が変わる page だけを残す。
+      $canonicalQuery = array_filter(request()->only(['page']), fn ($value) => $value !== null && $value !== '' && $value !== '1');
+      $canonicalUrl = url()->current() . ($canonicalQuery ? '?' . http_build_query($canonicalQuery) : '');
+  @endphp
+  <link rel="canonical" href="{{ $canonicalUrl }}">
 
   <meta property="og:site_name" content="{{ config('app.name') }}">
   <meta property="og:type" content="website">
   <meta property="og:title" content="@yield('title', config('app.name') . ' | 現在地から探す・実際の費用がわかる葬儀社マップ')">
   <meta property="og:description" content="@yield('description', '全国の葬儀社・葬儀会館を地図から探せる投稿型マップです。現在地から近い会館をすぐ見つけられ、実際にかかった費用の口コミ・写真付き口コミをリアルタイムで確認できます。')">
-  <meta property="og:url" content="{{ url()->current() }}">
+  <meta property="og:url" content="{{ $canonicalUrl }}">
   <meta property="og:locale" content="ja_JP">
 
   <meta name="twitter:card" content="summary">
