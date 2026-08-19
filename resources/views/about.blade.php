@@ -49,6 +49,21 @@
     </p>
   </section>
 
+
+  <section class="mb-4">
+    <h2 class="h6">お問い合わせ</h2>
+    <p class="text-muted small">
+      掲載内容の誤りのご指摘、掲載を希望されない旨のご連絡は、下記へお送りください。
+      内容を確認のうえ対応します。
+    </p>
+    <p class="small">
+      <a href="mailto:{{ config('mail.contact_address') }}">{{ config('mail.contact_address') }}</a>
+    </p>
+    <p class="text-muted small">
+      個別のご相談・お問い合わせの仲介は行っておりません。施設・教室へのご用件は、
+      各施設へ直接お問い合わせください。
+    </p>
+  </section>
   <a href="{{ route('venues.index') }}" class="d-block text-center text-muted mt-4">トップページに戻る</a>
 </div>
 @endsection
